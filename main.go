@@ -70,7 +70,7 @@ func main() {
 	attach.Color = color(build)
 	attach.MrkdwnIn = []string{"text", "fallback"}
 	attach.Fields = []*slack.Field{
-		{Title: "Commit", Value: fmt.Sprintf("%s - <%s|%s>", build.Message, commitURL(build, repo, vargs), build.Commit[:8])},
+		{Title: "Commit", Value: fmt.Sprintf("<%s|%s>", commitURL(build, repo, vargs), build.Message)},
 		{Title: "Repo", Value: fmt.Sprintf("<%s|%s>", repoURL(repo, vargs), repo.FullName), Short: true},
 		{Title: "Branch", Value: fmt.Sprintf("<%s|%s>", branchURL(build, repo, vargs), build.Branch), Short: true},
 	}
