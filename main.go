@@ -51,20 +51,20 @@ func main() {
 	if msg.Username == "" {
 		msg.Username = "Drone CI"
 	}
-	if msg.Channel == "" {
-		msg.Channel = "#dev"
-	}
 
 	// prepend the @ or # symbol if the user forgot to include
 	// in their configuration string.
 	if len(vargs.Recipient) != 0 {
 		msg.Channel = prepend("@", vargs.Recipient)
 	} else {
+		if vargs.Channel == "" {
+			vargs.Channel = "dev"
+		}
 		msg.Channel = prepend("#", vargs.Channel)
 	}
 
 	attach := msg.NewAttachment()
-	attach.Title = fmt.Sprintf("Build #%d %s in %s", build.Number, status(build), time.Duration(build.Finished-build.Started).String())
+	attach.Title = fmt.Sprintf("Build #%d %s in %s", build.Number, status(build), time.Duration((build.Finished-build.Started)*int64(time.Second)).String())
 	attach.TitleLink = fmt.Sprintf("%s/%s/%d", sys.Link, repo.FullName, build.Number)
 	attach.Fallback = fallback(repo, build)
 	attach.Color = color(build)
