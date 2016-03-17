@@ -1,6 +1,6 @@
 # drone-slack-enhanced
 
-An enhanced slack notification for Drone
+An enhanced slack notification for Drone and Gogs.
 
 ## Configuring
 
@@ -9,5 +9,5 @@ notify:
   slack:
     image: rschmukler/drone-slack
     webhook_url: $$SLACK_WEBHOOK
-    vcs: code.urbinternal.com
+    vcs: yourgogsinstance.com
 ```
