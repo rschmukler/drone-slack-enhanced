@@ -6,34 +6,47 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/rschmukler/drone-slack-enhanced/slack"
-
-	"github.com/drone/drone-go/drone"
-	"github.com/drone/drone-go/plugin"
 )
 
-type Slack struct {
-	Webhook   string `json:"webhook_url"`
-	Channel   string `json:"channel"`
-	Recipient string `json:"recipient"`
-	Username  string `json:"username"`
-	VCS       string `json:"vcs"`
+type Args struct {
+	Webhook   string `envconfig:"webhook_url"`
+	Channel   string
+	Recipient string
+	Username  string
+}
+
+type DroneVars struct {
+	BuildNumber   int    `envconfig:"build_number"`
+	BuildFinished string `envconfig:"build_finished"`
+	BuildStatus   string `envconfig:"build_status"`
+	BuildLink     string `envconfig:"build_link"`
+	CommitSha     string `envconfig:"commit_sha"`
+	CommitBranch  string `envconfig:"commit_branch"`
+	CommitAuthor  string `envconfig:"commit_author"`
+	CommitLink    string `envconfig:"commit_link"`
+	CommitMessage string `envconfig:"commit_message"`
+	JobStarted    int64  `envconfig:"job_started"`
+	Repo          string `envconfig:"build_link"`
+	RepoLink      string `envconfig:"repo_link"`
+	System        string
 }
 
 func main() {
 	var (
-		repo  = new(drone.Repo)
-		build = new(drone.Build)
-		sys   = new(drone.System)
-		vargs = new(Slack)
+		err   error
+		vargs Args
+		drone DroneVars
 	)
 
-	plugin.Param("build", build)
-	plugin.Param("repo", repo)
-	plugin.Param("system", sys)
-	plugin.Param("vargs", vargs)
+	err = envconfig.Process("plugin", &vargs)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
-	err := plugin.Parse()
+	err = envconfig.Process("drone", &drone)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -63,16 +76,18 @@ func main() {
 		msg.Channel = prepend("#", vargs.Channel)
 	}
 
+	runTime := time.Duration((time.Now().Unix() - drone.JobStarted) * int64(time.Second))
+
 	attach := msg.NewAttachment()
-	attach.Title = fmt.Sprintf("Build #%d %s in %s", build.Number, status(build), time.Duration((build.Finished-build.Started)*int64(time.Second)).String())
-	attach.TitleLink = fmt.Sprintf("%s/%s/%d", sys.Link, repo.FullName, build.Number)
-	attach.Fallback = fallback(repo, build)
-	attach.Color = color(build)
+	attach.Title = fmt.Sprintf("Build #%d %s in %s", drone.BuildNumber, fmtStatus(drone.BuildStatus), runTime.String())
+	attach.TitleLink = fmt.Sprintf(drone.BuildLink)
+	attach.Fallback = fallback(&drone)
+	attach.Color = color(drone.BuildStatus)
 	attach.MrkdwnIn = []string{"text", "fallback", "fields"}
 	attach.Fields = []*slack.Field{
-		{Title: "Commit", Value: fmt.Sprintf("<%s|%s>", commitURL(build, repo, vargs), strings.TrimSpace(build.Message))},
-		{Title: "Repo", Value: fmt.Sprintf("<%s|%s>", repoURL(repo, vargs), repo.FullName), Short: true},
-		{Title: "Branch", Value: fmt.Sprintf("<%s|%s>", branchURL(build, repo, vargs), build.Branch), Short: true},
+		{Title: "Commit", Value: fmt.Sprintf("<%s|%s>", drone.CommitLink, strings.TrimSpace(drone.CommitMessage))},
+		{Title: "Repo", Value: fmt.Sprintf("<%s|%s>", drone.RepoLink, drone.Repo), Short: true},
+		{Title: "Branch", Value: fmt.Sprintf("<%s|%s>", branchURL(&drone), drone.CommitBranch), Short: true},
 	}
 
 	// sends the message
@@ -89,51 +104,31 @@ func prepend(prefix, s string) string {
 	return s
 }
 
-func commitURL(build *drone.Build, repo *drone.Repo, args *Slack) string {
-	return fmt.Sprintf("%s/commit/%s", repoURL(repo, args), build.Commit)
+func branchURL(drone *DroneVars) string {
+	return fmt.Sprintf("%s/src/%s", drone.RepoLink, drone.CommitBranch)
 }
 
-func branchURL(build *drone.Build, repo *drone.Repo, args *Slack) string {
-	return fmt.Sprintf("%s/src/%s", repoURL(repo, args), build.Branch)
-}
-
-func repoURL(repo *drone.Repo, args *Slack) string {
-	return fmt.Sprintf("https://%s/%s", args.VCS, repo.FullName)
-}
-
-func fallback(repo *drone.Repo, build *drone.Build) string {
-	return fmt.Sprintf("%s %s/%s#%s (%s) by %s",
-		build.Status,
-		repo.Owner,
-		repo.Name,
-		build.Commit[:8],
-		build.Branch,
-		build.Author,
+func fallback(drone *DroneVars) string {
+	return fmt.Sprintf("%s %s#%s (%s) by %s",
+		fmtStatus(drone.BuildStatus),
+		drone.Repo,
+		drone.CommitSha[:8],
+		drone.CommitBranch,
+		drone.CommitAuthor,
 	)
 }
 
-func color(build *drone.Build) string {
-	switch build.Status {
-	case drone.StatusSuccess:
+func color(buildStatus string) string {
+	switch buildStatus {
+	case "success":
 		return "good"
-	case drone.StatusFailure, drone.StatusError, drone.StatusKilled:
+	case "failure", "error", "killed":
 		return "danger"
 	default:
 		return "warning"
 	}
 }
 
-func status(build *drone.Build) string {
-	switch build.Status {
-	case drone.StatusSuccess:
-		return "Passed"
-	case drone.StatusFailure:
-		return "Failed"
-	case drone.StatusKilled:
-		return "Aborted"
-	case drone.StatusError:
-		return "Errored"
-	default:
-		return "Failed"
-	}
+func fmtStatus(status string) string {
+	return strings.Title(status)
 }
